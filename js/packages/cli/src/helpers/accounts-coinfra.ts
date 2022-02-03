@@ -120,9 +120,11 @@ export const createCandyMachineCoinfra = async function (
     });
   }
 
-  const transaction = anchorProgram.transaction.initializeCandyMachine(
-    candyData,
-    {
+  return {
+    candyMachine: candyAccount.publicKey,
+    uuid: candyData.uuid,
+    // for estimating the cost, execute initializeCandyMachine at first
+    txId: await anchorProgram.rpc.initializeCandyMachine(candyData, {
       accounts: {
         candyMachine: candyAccount.publicKey,
         wallet: treasuryWallet,
@@ -142,18 +144,6 @@ export const createCandyMachineCoinfra = async function (
           candyAccount.publicKey,
         ),
       ],
-    },
-  );
-
-  transaction.feePayer = wallet.publicKey;
-  transaction.recentBlockhash = (
-    await anchorProgram.provider.connection.getRecentBlockhash('singleGossip')
-  ).blockhash;
-  transaction.partialSign(...[candyAccount]);
-
-  return {
-    candyMachine: candyAccount.publicKey,
-    uuid: candyData.uuid,
-    transaction,
+    }),
   };
 };

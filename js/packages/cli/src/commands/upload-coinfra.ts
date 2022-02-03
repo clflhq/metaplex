@@ -71,7 +71,6 @@ export async function uploadCoinfra({
 
   const firstAssetManifest = manifests[0];
 
-  const transactions: Transaction[] = [];
   let candyMachine;
   try {
     if (
@@ -84,6 +83,7 @@ export async function uploadCoinfra({
 
     // initialize candy
     console.log(`initializing candy machine`);
+
     const res = await createCandyMachineCoinfra(
       anchorProgram,
       wallet,
@@ -115,7 +115,6 @@ export async function uploadCoinfra({
     cacheContent.program.uuid = res.uuid;
     cacheContent.program.candyMachine = res.candyMachine.toBase58();
     candyMachine = res.candyMachine;
-    transactions.push(res.transaction);
 
     console.info(
       `initialized config for a candy machine with publickey: ${res.candyMachine.toBase58()}`,
@@ -149,121 +148,107 @@ export async function uploadCoinfra({
   const keys = Object.keys(cacheContent.items);
   if (!hiddenSettings) {
     try {
-      // add coinfig to candy machine from cacheContent.items
-      await Promise.all(
-        chunks(Array.from(Array(keys.length).keys()), 1000).map(
-          async allIndexesInSlice => {
-            // if this value is large like 10, "RangeError: encoding overruns Buffer" occur
-            const bachsize = 5;
-            for (
-              let offset = 0;
-              offset < allIndexesInSlice.length;
-              offset += bachsize
-            ) {
-              const indexes = allIndexesInSlice.slice(
-                offset,
-                offset + bachsize,
-              );
-              const onChain = indexes.filter(i => {
-                const index = keys[i];
-                return cacheContent.items[index]?.onChain || false;
-              });
-              const ind = keys[indexes[0]];
-
-              if (onChain.length != indexes.length) {
-                console.info(
-                  `Writing indices ${ind}-${keys[indexes[indexes.length - 1]]}`,
-                );
-                try {
-                  const transaction = anchorProgram.transaction.addConfigLines(
-                    ind,
-                    indexes.map(i => {
-                      return {
-                        uri: cacheContent.items[keys[i]].link,
-                        name: cacheContent.items[keys[i]].name,
-                      };
-                    }),
-                    {
-                      accounts: {
-                        candyMachine,
-                        authority: wallet.publicKey,
-                      },
-                    },
-                  );
-                  transaction.feePayer = wallet.publicKey;
-                  transaction.recentBlockhash = (
-                    await anchorProgram.provider.connection.getRecentBlockhash(
-                      'singleGossip',
-                    )
-                  ).blockhash;
-                  transactions.push(transaction);
-                  indexes.forEach(i => {
-                    cacheContent.items[keys[i]] = {
-                      ...cacheContent.items[keys[i]],
-                      onChain: true,
-                      verifyRun: false,
-                    };
-                  });
-                } catch (error) {
-                  console.error(
-                    `saving config line ${ind}-${
-                      keys[indexes[indexes.length - 1]]
-                    } failed`,
-                    error,
-                  );
-                  uploadSuccessful = false;
-                }
-              }
-            }
-          },
-        ),
+      // add config to candy machine from cacheContent.items
+      const TRANSACTION_SIZE = 5;
+      const allIndexesInSlices: number[][] = slice(
+        Array.from(Array(keys.length).keys()),
+        500, // need to sign each 500 NFTS(100 txs) for preventing from the hangup of the Phantom wallet
       );
-
-      // need to sign each 1,000 NFTS(200 txs)
-      const SIGN_BATCH_SIZE = 200;
-      const slicedTransactions: Transaction[][] = transactions.reduce(
-        (resultArray, item, index) => {
-          const chunkIndex = Math.floor(index / SIGN_BATCH_SIZE);
-          if (!resultArray[chunkIndex]) {
-            resultArray[chunkIndex] = []; // start a new chunk
-          }
-          resultArray[chunkIndex].push(item);
-          return resultArray;
-        },
-        [],
-      );
-      console.log('slicedTransactions');
-      console.log(slicedTransactions);
-
-      const signedTransactions: Transaction[] = [];
-      for (let i = 0; i < slicedTransactions.length; i++) {
-        const partialSignedTransactions = await wallet.signAllTransactions(
-          slicedTransactions[i],
-        );
-        signedTransactions.push(...partialSignedTransactions);
-      }
-      console.log('signedTransactions');
-      console.log(signedTransactions);
-      const pendingTransactions: Promise<{ txid: string; slot: number }>[] = [];
-      for (let i = 0; i < signedTransactions.length; i++) {
-        const signedTransactionPromise = sendSignedTransaction({
-          connection: anchorProgram.provider.connection,
-          signedTransaction: signedTransactions[i],
-        });
-
-        signedTransactionPromise
-          .then(({ txid, slot }) => {
-            console.log('success transaction:', txid, 'slot:', slot);
-          })
-          .catch(reason => {
-            throw new Error(`failed transaction: ${reason}`);
+      console.log('allIndexesInSlices');
+      console.log(allIndexesInSlices);
+      for await (const allIndexesInSlice of allIndexesInSlices) {
+        const unsignedTransactions: Transaction[] = [];
+        // From Genesys Go
+        // Call a blockhash a few seconds older which will have been synced across all machines ledgers.
+        // The closer you are to the very tip of the ledger, the more likely it is you will see errors bc
+        // the newest valid blocks have not had a chance to propagate across the entire chain and the bad forks have not yet been pruned.
+        const recentBlockhash =
+          await anchorProgram.provider.connection.getRecentBlockhash(
+            'singleGossip',
+          );
+        // if this value is large like 10, "RangeError: encoding overruns Buffer" occur
+        for (
+          let offset = 0;
+          offset < allIndexesInSlice.length;
+          offset += TRANSACTION_SIZE
+        ) {
+          const indexes = allIndexesInSlice.slice(
+            offset,
+            offset + TRANSACTION_SIZE,
+          );
+          const onChain = indexes.filter(i => {
+            const index = keys[i];
+            return cacheContent.items[index]?.onChain || false;
           });
-        pendingTransactions.push(signedTransactionPromise);
+          const ind = keys[indexes[0]];
+
+          if (onChain.length != indexes.length) {
+            console.info(
+              `Writing indices ${ind}-${keys[indexes[indexes.length - 1]]}`,
+            );
+            try {
+              const transaction = anchorProgram.transaction.addConfigLines(
+                ind,
+                indexes.map(i => {
+                  return {
+                    uri: cacheContent.items[keys[i]].link,
+                    name: cacheContent.items[keys[i]].name,
+                  };
+                }),
+                {
+                  accounts: {
+                    candyMachine,
+                    authority: wallet.publicKey,
+                  },
+                },
+              );
+              transaction.feePayer = wallet.publicKey;
+              transaction.recentBlockhash = recentBlockhash.blockhash;
+              unsignedTransactions.push(transaction);
+
+              indexes.forEach(i => {
+                cacheContent.items[keys[i]] = {
+                  ...cacheContent.items[keys[i]],
+                  onChain: true,
+                  verifyRun: false,
+                };
+              });
+            } catch (error) {
+              console.error(
+                `saving config line ${ind}-${
+                  keys[indexes[indexes.length - 1]]
+                } failed`,
+                error,
+              );
+              uploadSuccessful = false;
+            }
+          }
+        }
+        // send transactions
+        const signedTransactions = await wallet.signAllTransactions(
+          unsignedTransactions,
+        );
+        const pendingTransactions: Promise<{
+          txid: string;
+          slot: number;
+        }>[] = [];
+        for (const signedTransaction of signedTransactions) {
+          pendingTransactions.push(
+            sendSignedTransaction({
+              connection: anchorProgram.provider.connection,
+              signedTransaction: signedTransaction,
+            }).catch(reason => {
+              throw new Error(`failed transaction: ${reason}`);
+            }),
+          );
+        }
+        // wait the confirmation of transactions
+        const result = await Promise.all(pendingTransactions);
+        console.log(result);
       }
-      await Promise.all(pendingTransactions);
     } catch (error) {
       uploadSuccessful = false;
-      console.error(error);
+      throw error;
     }
   } else {
     console.info('Skipping upload to chain as this is a hidden Candy Machine');
@@ -274,4 +259,15 @@ export async function uploadCoinfra({
     uploadSuccessful,
     cacheContent,
   };
+}
+
+function slice(items: any, batchSize: number) {
+  return items.reduce((resultArray: any, item: any, index: number) => {
+    const chunkIndex = Math.floor(index / batchSize);
+    if (!resultArray[chunkIndex]) {
+      resultArray[chunkIndex] = []; // start a new chunk
+    }
+    resultArray[chunkIndex].push(item);
+    return resultArray;
+  }, []);
 }

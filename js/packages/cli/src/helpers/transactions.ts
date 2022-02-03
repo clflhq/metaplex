@@ -86,7 +86,7 @@ export async function sendSignedTransaction({
     },
   );
 
-  log.debug('Started awaiting confirmation for', txid);
+  console.log('Started awaiting confirmation for', txid);
 
   let done = false;
   (async () => {
@@ -95,9 +95,11 @@ export async function sendSignedTransaction({
         skipPreflight: true,
       });
       await sleep(500);
+      console.log('retry confirmation for', txid);
     }
   })();
   try {
+    console.log('start awaitTransactionSignatureConfirmation for', txid);
     const confirmation = await awaitTransactionSignatureConfirmation(
       txid,
       timeout,
@@ -105,18 +107,19 @@ export async function sendSignedTransaction({
       'confirmed',
       true,
     );
+    console.log('end awaitTransactionSignatureConfirmation for', txid);
 
     if (!confirmation)
       throw new Error('Timed out awaiting confirmation on transaction');
 
     if (confirmation.err) {
-      log.error(confirmation.err);
+      console.error(confirmation.err);
       throw new Error('Transaction failed: Custom instruction error');
     }
 
     slot = confirmation?.slot || 0;
   } catch (err) {
-    log.error('Timeout Error caught', err);
+    console.error('Timeout Error caught', err);
     if (err.timeout) {
       throw new Error('Timed out awaiting confirmation on transaction');
     }
@@ -126,7 +129,7 @@ export async function sendSignedTransaction({
         await simulateTransaction(connection, signedTransaction, 'single')
       ).value;
     } catch (e) {
-      log.error('Simulate Transaction error', e);
+      console.error('Simulate Transaction error', e);
     }
     if (simulateResult && simulateResult.err) {
       if (simulateResult.logs) {
@@ -141,13 +144,14 @@ export async function sendSignedTransaction({
       }
       throw new Error(JSON.stringify(simulateResult.err));
     }
-    log.error('Got this far.');
-    // throw new Error('Transaction failed');
+    console.error('Got this far.');
+    throw new Error('Transaction failed');
   } finally {
     done = true;
   }
 
-  log.debug('Latency (ms)', txid, getUnixTs() - startTime);
+  console.log('Latency (ms)', txid, getUnixTs() - startTime);
+
   return { txid, slot };
 }
 
