@@ -84,6 +84,7 @@ const Home = (props: HomeProps) => {
           candyMachinePublicKey,
           props.connection,
         );
+        console.log(JSON.stringify(cndy.state, null, 4));
         setCandyMachine(cndy);
       } catch (e) {
         console.log('There was a problem fetching Candy Machine state');
