@@ -1,6 +1,9 @@
-import { PublicKey, Keypair } from '@solana/web3.js';
+import { PublicKey, Keypair, Transaction } from '@solana/web3.js';
 import * as anchor from '@project-serum/anchor';
-import { sendTransactionWithRetryWithKeypair } from '../helpers/transactions';
+import {
+  sendTransactionWithRetryWithKeypair,
+  sendSignedTransaction,
+} from '../helpers/transactions';
 import { Program } from '@project-serum/anchor';
 
 export async function withdraw(
@@ -76,5 +79,37 @@ export async function withdrawV2(
       instructions,
       signers,
     )
+  ).txid;
+}
+
+export async function withdrawCoinfra(
+  anchorProgram: Program,
+  wallet: anchor.Wallet,
+  candyAddress: PublicKey,
+): Promise<string> {
+  const instructions = [
+    anchorProgram.instruction.withdrawFunds({
+      accounts: {
+        candyMachine: candyAddress,
+        authority: wallet.publicKey,
+      },
+    }),
+  ];
+
+  const transaction = new Transaction();
+  instructions.forEach(instruction => transaction.add(instruction));
+  transaction.feePayer = wallet.publicKey;
+  transaction.recentBlockhash = (
+    await anchorProgram.provider.connection.getRecentBlockhash('singleGossip')
+  ).blockhash;
+  const signedTransaction = await wallet.signTransaction(transaction);
+
+  return (
+    await sendSignedTransaction({
+      connection: anchorProgram.provider.connection,
+      signedTransaction: signedTransaction,
+    }).catch(reason => {
+      throw new Error(`failed transaction: ${reason}`);
+    })
   ).txid;
 }
