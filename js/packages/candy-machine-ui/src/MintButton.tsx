@@ -30,6 +30,8 @@ export const MintButton = ({
       return <CircularProgress />;
     } else if (candyMachine?.state.isPresale) {
       return 'PRESALE MINT';
+    } else if (clicked && candyMachine?.state.gatekeeper) {
+      return <CircularProgress />;
     }
     return 'MINT';
   };
@@ -38,6 +40,7 @@ export const MintButton = ({
     <Button
       id="coinfraCtaButton"
       disabled={
+        clicked ||
         candyMachine?.state.isSoldOut ||
         isMinting ||
         !candyMachine?.state.isActive
