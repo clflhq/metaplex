@@ -86,9 +86,6 @@ export async function withdrawCoinfra(
   anchorProgram: Program,
   wallet: anchor.Wallet,
   candyAddress: PublicKey,
-  lamports: number,
-  charityAddress: PublicKey | undefined,
-  charityPercent: number,
 ): Promise<string> {
   const instructions = [
     anchorProgram.instruction.withdrawFunds({
@@ -98,19 +95,10 @@ export async function withdrawCoinfra(
       },
     }),
   ];
-  if (!!charityAddress && charityPercent > 0) {
-    const cpf = 100 / charityPercent;
-    instructions.push(
-      anchor.web3.SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: new PublicKey(charityAddress),
-        lamports: Math.floor(lamports * cpf),
-      }),
-    );
-  }
 
   const transaction = new Transaction();
   instructions.forEach(instruction => transaction.add(instruction));
+  transaction.feePayer = wallet.publicKey;
   transaction.recentBlockhash = (
     await anchorProgram.provider.connection.getRecentBlockhash('singleGossip')
   ).blockhash;
