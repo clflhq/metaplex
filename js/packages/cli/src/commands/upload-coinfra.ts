@@ -339,7 +339,7 @@ export async function verifyUploadCoinfra({
               `and (${cacheItem.link}). marking to rerun for image`,
             key,
           );
-          cacheItem.onChain = false;
+          // cacheItem.onChain = false; // Even if the candy machine doesn't propagate across the network, cacheItem.onChain will turn off. So I comment out this line.
           allGood = false;
         } else {
           cacheItem.verifyRun = true;
