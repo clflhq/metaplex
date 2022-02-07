@@ -61,7 +61,6 @@ export async function uploadCoinfra({
   cacheContent: any;
   error: Error;
 }> {
-  // const cacheContent: any = { program: {}, items: {} };
   const SIZE = metadatas.length;
   console.log('currentCacheContent');
   console.log(currentCacheContent);
@@ -140,27 +139,6 @@ export async function uploadCoinfra({
       `config for a candy machine with publickey: ${cacheContent.program.candyMachine} has been already initialized`,
     );
   }
-
-  // add config to cacheContent.items
-  /*
-  await Promise.all(
-    chunks(Array.from(Array(SIZE).keys()), batchSize || 50).map(
-      async allIndexesInSlice => {
-        for (let i = 0; i < allIndexesInSlice.length; i++) {
-          const manifest = manifests[allIndexesInSlice[i]];
-          const metadataLink = metadataLinks[allIndexesInSlice[i]];
-
-          console.debug('Updating cache for ', allIndexesInSlice[i]);
-          cacheContent.items[allIndexesInSlice[i]] = {
-            link: metadataLink,
-            name: manifest.name,
-            onChain: false,
-          };
-        }
-      },
-    ),
-  );
-  */
 
   const keys = Object.keys(cacheContent.items);
   if (!hiddenSettings) {
@@ -318,7 +296,7 @@ export async function verifyUploadCoinfra({
         // Save frequently.
         /*
         if (i % 100 == 0) saveCache(cacheName, env, cacheContent);
-*/
+        */
         const key = allIndexesInSlice[i];
         console.log('Looking at key ', key);
 
@@ -333,7 +311,7 @@ export async function verifyUploadCoinfra({
         const uri = fromUTF8Array([...thisSlice.slice(40, 240)]);
         const cacheItem = cacheContent.items[key];
         if (!name.match(cacheItem.name) || !uri.match(cacheItem.link)) {
-          //leaving here for debugging reasons, but it's pretty useless. if the first upload fails - all others are wrong
+          // leaving here for debugging reasons, but it's pretty useless. if the first upload fails - all others are wrong
           console.log(
             `Name (${name}) or uri (${uri}) didnt match cache values of (${cacheItem.name})` +
               `and (${cacheItem.link}). marking to rerun for image`,
@@ -377,7 +355,6 @@ export async function verifyUploadCoinfra({
     console.log('ready to deploy!');
   }
   return cacheContent;
-  // saveCache(cacheName, env, cacheContent);
 }
 
 function slice(items: any, batchSize: number) {
