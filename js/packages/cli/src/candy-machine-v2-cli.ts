@@ -389,11 +389,11 @@ programCommand('verify_upload')
           const cacheItem = cacheContent.items[key];
           if (!name.match(cacheItem.name) || !uri.match(cacheItem.link)) {
             //leaving here for debugging reasons, but it's pretty useless. if the first upload fails - all others are wrong
-            /*log.info(
-                `Name (${name}) or uri (${uri}) didnt match cache values of (${cacheItem.name})` +
-                  `and (${cacheItem.link}). marking to rerun for image`,
-                key,
-              );*/
+            log.info(
+              `Name (${name}) or uri (${uri}) didn't match cache values of (${cacheItem.name})` +
+                `and (${cacheItem.link}). marking to rerun for image`,
+              key,
+            );
             cacheItem.onChain = false;
             allGood = false;
           } else {

@@ -1,14 +1,18 @@
 import { createCandyMachineCoinfra } from '../helpers/accounts-coinfra';
-import { chunks } from '../helpers/various-coinfra';
 import { sendSignedTransaction } from '../helpers/transactions';
 import { PublicKey, Transaction } from '@solana/web3.js';
 import { BN, Program, web3, Wallet } from '@project-serum/anchor';
+import { chunks, fromUTF8Array } from '../helpers/various-coinfra';
+import {
+  CONFIG_LINE_SIZE_V2,
+  CONFIG_ARRAY_START_V2,
+} from '../helpers/constants';
+import * as anchor from '@project-serum/anchor';
 
 export async function uploadCoinfra({
   totalNFTs,
   retainAuthority,
   mutable,
-  batchSize,
   price,
   treasuryWallet,
   splToken,
@@ -20,15 +24,14 @@ export async function uploadCoinfra({
   uuid,
   wallet,
   anchorProgram,
-  manifests,
-  metadataLinks,
+  metadatas,
+  currentCacheContent,
 }: {
   cacheName: string;
   env: string;
   totalNFTs: number;
   retainAuthority: boolean;
   mutable: boolean;
-  batchSize: number;
   price: BN;
   treasuryWallet: PublicKey;
   splToken: PublicKey | null;
@@ -52,16 +55,20 @@ export async function uploadCoinfra({
   uuid: string;
   wallet: Wallet;
   anchorProgram: Program;
-  manifests: any[];
-  metadataLinks: string;
+  metadatas: any[];
+  currentCacheContent: string;
 }): Promise<{
-  uploadSuccessful: boolean;
   cacheContent: any;
+  error: Error;
 }> {
-  let uploadSuccessful = true;
-  const cacheContent: any = { program: {}, items: {} };
+  // const cacheContent: any = { program: {}, items: {} };
+  const SIZE = metadatas.length;
+  console.log('currentCacheContent');
+  console.log(currentCacheContent);
 
-  const SIZE = manifests.length;
+  const cacheContent: any = currentCacheContent || {};
+  console.log('cacheContent');
+  console.log(cacheContent);
 
   if (SIZE === 0) {
     const error = new Error('Your manifests file is invalid');
@@ -69,64 +76,73 @@ export async function uploadCoinfra({
     throw error;
   }
 
-  const firstAssetManifest = manifests[0];
+  let candyMachine = cacheContent.program.candyMachine
+    ? new PublicKey(cacheContent.program.candyMachine)
+    : undefined;
 
-  let candyMachine;
-  try {
-    if (
-      !firstAssetManifest.properties?.creators?.every(
-        creator => creator.address !== undefined,
-      )
-    ) {
-      throw new Error('Creator address is missing');
+  if (!cacheContent.program.uuid) {
+    const firstAssetManifest = metadatas[0];
+
+    try {
+      if (
+        !firstAssetManifest.properties?.creators?.every(
+          creator => creator.address !== undefined,
+        )
+      ) {
+        throw new Error('Creator address is missing');
+      }
+
+      // initialize candy
+      console.log(`initializing candy machine`);
+
+      const res = await createCandyMachineCoinfra(
+        anchorProgram,
+        wallet,
+        treasuryWallet,
+        splToken,
+        {
+          itemsAvailable: new BN(totalNFTs),
+          uuid,
+          symbol: firstAssetManifest.symbol,
+          sellerFeeBasisPoints: firstAssetManifest.seller_fee_basis_points,
+          isMutable: mutable,
+          maxSupply: new BN(0),
+          retainAuthority: retainAuthority,
+          gatekeeper,
+          goLiveDate,
+          price,
+          endSettings,
+          whitelistMintSettings,
+          hiddenSettings,
+          creators: firstAssetManifest.properties.creators.map(creator => {
+            return {
+              address: new PublicKey(creator.address),
+              verified: true,
+              share: creator.share,
+            };
+          }),
+        },
+      );
+      cacheContent.program.uuid = res.uuid;
+      cacheContent.program.candyMachine = res.candyMachine.toBase58();
+      candyMachine = res.candyMachine;
+
+      console.info(
+        `initialized config for a candy machine with publickey: ${res.candyMachine.toBase58()}`,
+      );
+    } catch (error) {
+      console.error('Error deploying config to Solana network.', error);
+      throw error;
     }
-
-    // initialize candy
-    console.log(`initializing candy machine`);
-
-    const res = await createCandyMachineCoinfra(
-      anchorProgram,
-      wallet,
-      treasuryWallet,
-      splToken,
-      {
-        itemsAvailable: new BN(totalNFTs),
-        uuid,
-        symbol: firstAssetManifest.symbol,
-        sellerFeeBasisPoints: firstAssetManifest.seller_fee_basis_points,
-        isMutable: mutable,
-        maxSupply: new BN(0),
-        retainAuthority: retainAuthority,
-        gatekeeper,
-        goLiveDate,
-        price,
-        endSettings,
-        whitelistMintSettings,
-        hiddenSettings,
-        creators: firstAssetManifest.properties.creators.map(creator => {
-          return {
-            address: new PublicKey(creator.address),
-            verified: true,
-            share: creator.share,
-          };
-        }),
-      },
+    console.log('Uploading Size', SIZE, firstAssetManifest);
+  } else {
+    console.log(
+      `config for a candy machine with publickey: ${cacheContent.program.candyMachine} has been already initialized`,
     );
-    cacheContent.program.uuid = res.uuid;
-    cacheContent.program.candyMachine = res.candyMachine.toBase58();
-    candyMachine = res.candyMachine;
-
-    console.info(
-      `initialized config for a candy machine with publickey: ${res.candyMachine.toBase58()}`,
-    );
-  } catch (error) {
-    console.error('Error deploying config to Solana network.', error);
-    throw error;
   }
 
-  console.log('Uploading Size', SIZE, firstAssetManifest);
-
   // add config to cacheContent.items
+  /*
   await Promise.all(
     chunks(Array.from(Array(SIZE).keys()), batchSize || 50).map(
       async allIndexesInSlice => {
@@ -144,6 +160,7 @@ export async function uploadCoinfra({
       },
     ),
   );
+  */
 
   const keys = Object.keys(cacheContent.items);
   if (!hiddenSettings) {
@@ -156,8 +173,18 @@ export async function uploadCoinfra({
       );
       console.log('allIndexesInSlices');
       console.log(allIndexesInSlices);
-      for await (const allIndexesInSlice of allIndexesInSlices) {
+      for (const allIndexesInSlice of allIndexesInSlices) {
         const unsignedTransactions: Transaction[] = [];
+        const completeIndexes: string[] = [];
+
+        // skip if allIndexesInSlice is already onchain
+        const onChain = allIndexesInSlice.filter(i => {
+          return cacheContent.items[keys[i]]?.onChain || false;
+        });
+        if (onChain.length === allIndexesInSlice.length) {
+          continue;
+        }
+
         // From Genesys Go
         // Call a blockhash a few seconds older which will have been synced across all machines ledgers.
         // The closer you are to the very tip of the ledger, the more likely it is you will see errors bc
@@ -166,7 +193,7 @@ export async function uploadCoinfra({
           await anchorProgram.provider.connection.getRecentBlockhash(
             'singleGossip',
           );
-        // if this value is large like 10, "RangeError: encoding overruns Buffer" occur
+        // if TRANSACTION_SIZE is larger than 10, "RangeError: encoding overruns Buffer" will occur
         for (
           let offset = 0;
           offset < allIndexesInSlice.length;
@@ -177,8 +204,7 @@ export async function uploadCoinfra({
             offset + TRANSACTION_SIZE,
           );
           const onChain = indexes.filter(i => {
-            const index = keys[i];
-            return cacheContent.items[index]?.onChain || false;
+            return cacheContent.items[keys[i]]?.onChain || false;
           });
           const ind = keys[indexes[0]];
 
@@ -205,13 +231,8 @@ export async function uploadCoinfra({
               transaction.feePayer = wallet.publicKey;
               transaction.recentBlockhash = recentBlockhash.blockhash;
               unsignedTransactions.push(transaction);
-
               indexes.forEach(i => {
-                cacheContent.items[keys[i]] = {
-                  ...cacheContent.items[keys[i]],
-                  onChain: true,
-                  verifyRun: false,
-                };
+                completeIndexes.push(keys[i]);
               });
             } catch (error) {
               console.error(
@@ -220,7 +241,6 @@ export async function uploadCoinfra({
                 } failed`,
                 error,
               );
-              uploadSuccessful = false;
             }
           }
         }
@@ -245,20 +265,119 @@ export async function uploadCoinfra({
         // wait the confirmation of transactions
         const result = await Promise.all(pendingTransactions);
         console.log(result);
+        // change cache
+        completeIndexes.forEach(v => {
+          cacheContent.items[v] = {
+            ...cacheContent.items[v],
+            onChain: true,
+            verifyRun: false,
+          };
+        });
       }
     } catch (error) {
-      uploadSuccessful = false;
-      throw error;
+      return {
+        cacheContent,
+        error,
+      };
     }
   } else {
     console.info('Skipping upload to chain as this is a hidden Candy Machine');
   }
 
-  console.log(`Done. Successful! = ${uploadSuccessful}.`);
+  console.log(`Done. Successful!`);
   return {
-    uploadSuccessful,
     cacheContent,
+    error: undefined,
   };
+}
+
+export async function verifyUploadCoinfra({
+  anchorProgram,
+  cacheContent,
+}: {
+  anchorProgram: Program;
+  cacheContent: any;
+}): Promise<string> {
+  const candyMachine = await anchorProgram.provider.connection.getAccountInfo(
+    new PublicKey(cacheContent.program.candyMachine),
+  );
+
+  const candyMachineObj = await anchorProgram.account.candyMachine.fetch(
+    new PublicKey(cacheContent.program.candyMachine),
+  );
+  let allGood = true;
+
+  const keys = Object.keys(cacheContent.items)
+    .filter(k => !cacheContent.items[k].verifyRun)
+    .sort((a, b) => Number(a) - Number(b));
+
+  console.log('Key size', keys.length);
+  await Promise.all(
+    chunks(keys, 500).map(async allIndexesInSlice => {
+      for (let i = 0; i < allIndexesInSlice.length; i++) {
+        // Save frequently.
+        /*
+        if (i % 100 == 0) saveCache(cacheName, env, cacheContent);
+*/
+        const key = allIndexesInSlice[i];
+        console.log('Looking at key ', key);
+
+        const thisSlice = candyMachine.data.slice(
+          CONFIG_ARRAY_START_V2 + 4 + CONFIG_LINE_SIZE_V2 * key,
+          CONFIG_ARRAY_START_V2 + 4 + CONFIG_LINE_SIZE_V2 * (key + 1),
+        );
+        console.log('thisSlice');
+        console.log(thisSlice);
+
+        const name = fromUTF8Array([...thisSlice.slice(2, 34)]);
+        const uri = fromUTF8Array([...thisSlice.slice(40, 240)]);
+        const cacheItem = cacheContent.items[key];
+        if (!name.match(cacheItem.name) || !uri.match(cacheItem.link)) {
+          //leaving here for debugging reasons, but it's pretty useless. if the first upload fails - all others are wrong
+          console.log(
+            `Name (${name}) or uri (${uri}) didnt match cache values of (${cacheItem.name})` +
+              `and (${cacheItem.link}). marking to rerun for image`,
+            key,
+          );
+          cacheItem.onChain = false;
+          allGood = false;
+        } else {
+          cacheItem.verifyRun = true;
+        }
+      }
+    }),
+  );
+
+  if (!allGood) {
+    // saveCache(cacheName, env, cacheContent);
+    console.log('cacheContent', cacheContent);
+    throw new Error(
+      "The name or URI didn't match the cache values. Please wait for a moment until your candy machine propagates across the network.",
+    );
+  }
+
+  const lineCount = new anchor.BN(
+    candyMachine.data.slice(CONFIG_ARRAY_START_V2, CONFIG_ARRAY_START_V2 + 4),
+    undefined,
+    'le',
+  );
+
+  console.log(
+    `uploaded (${lineCount.toNumber()}) out of (${
+      candyMachineObj.data.itemsAvailable
+    })`,
+  );
+  if (candyMachineObj.data.itemsAvailable > lineCount.toNumber()) {
+    throw new Error(
+      `predefined number of NFTs (${
+        candyMachineObj.data.itemsAvailable
+      }) is smaller than the uploaded one (${lineCount.toNumber()})`,
+    );
+  } else {
+    console.log('ready to deploy!');
+  }
+  return cacheContent;
+  // saveCache(cacheName, env, cacheContent);
 }
 
 function slice(items: any, batchSize: number) {
