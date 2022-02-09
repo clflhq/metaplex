@@ -194,6 +194,7 @@ export async function uploadCoinfra({
               const transaction = anchorProgram.transaction.addConfigLines(
                 ind,
                 indexes.map(i => {
+                  completeIndexes.push(keys[i]);
                   return {
                     uri: cacheContent.items[keys[i]].link,
                     name: cacheContent.items[keys[i]].name,
@@ -209,9 +210,6 @@ export async function uploadCoinfra({
               transaction.feePayer = wallet.publicKey;
               transaction.recentBlockhash = recentBlockhash.blockhash;
               unsignedTransactions.push(transaction);
-              indexes.forEach(i => {
-                completeIndexes.push(keys[i]);
-              });
             } catch (error) {
               console.error(
                 `saving config line ${ind}-${
