@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import * as anchor from '@project-serum/anchor';
 
-import styled from 'styled-components';
 import { Container, Snackbar } from '@material-ui/core';
 import Alert from '@material-ui/lab/Alert';
 import { PublicKey } from '@solana/web3.js';
@@ -18,8 +17,6 @@ import { AlertState } from './utils';
 import { Header } from './Header';
 import { MintButton } from './MintButton';
 import { GatewayProvider } from '@civic/solana-gateway-react';
-
-const MintContainer = styled.div``; // add your owns styles here
 
 export interface HomeProps {
   candyMachineId: string;
@@ -175,39 +172,36 @@ const Home = (props: HomeProps) => {
           ) : (
             <>
               <Header candyMachine={candyMachine} />
-              <MintContainer>
-                {candyMachine?.state.isActive &&
-                candyMachine?.state.gatekeeper &&
-                wallet.publicKey &&
-                wallet.signTransaction ? (
-                  <GatewayProvider
-                    wallet={{
-                      publicKey:
-                        wallet.publicKey ||
-                        new PublicKey(CANDY_MACHINE_PROGRAM),
-                      //@ts-ignore
-                      signTransaction: wallet.signTransaction,
-                    }}
-                    gatekeeperNetwork={
-                      candyMachine?.state?.gatekeeper?.gatekeeperNetwork
-                    }
-                    clusterUrl={rpcUrl}
-                    options={{ autoShowModal: false }}
-                  >
-                    <MintButton
-                      candyMachine={candyMachine}
-                      isMinting={isUserMinting}
-                      onMint={onMint}
-                    />
-                  </GatewayProvider>
-                ) : (
+              {candyMachine?.state.isActive &&
+              candyMachine?.state.gatekeeper &&
+              wallet.publicKey &&
+              wallet.signTransaction ? (
+                <GatewayProvider
+                  wallet={{
+                    publicKey:
+                      wallet.publicKey || new PublicKey(CANDY_MACHINE_PROGRAM),
+                    //@ts-ignore
+                    signTransaction: wallet.signTransaction,
+                  }}
+                  gatekeeperNetwork={
+                    candyMachine?.state?.gatekeeper?.gatekeeperNetwork
+                  }
+                  clusterUrl={rpcUrl}
+                  options={{ autoShowModal: false }}
+                >
                   <MintButton
                     candyMachine={candyMachine}
                     isMinting={isUserMinting}
                     onMint={onMint}
                   />
-                )}
-              </MintContainer>
+                </GatewayProvider>
+              ) : (
+                <MintButton
+                  candyMachine={candyMachine}
+                  isMinting={isUserMinting}
+                  onMint={onMint}
+                />
+              )}
             </>
           )}
         </div>
