@@ -3,6 +3,7 @@ import {
   PublicKey,
   SystemProgram,
   AccountInfo,
+  Connection,
 } from '@solana/web3.js';
 import { CANDY_MACHINE_PROGRAM_V2_ID } from './constants';
 import * as anchor from '@project-serum/anchor';
@@ -120,11 +121,10 @@ export const createCandyMachineCoinfra = async function (
     });
   }
 
-  return {
-    candyMachine: candyAccount.publicKey,
-    uuid: candyData.uuid,
+  let txId;
+  try {
     // for estimating the cost, execute initializeCandyMachine at first
-    txId: await anchorProgram.rpc.initializeCandyMachine(candyData, {
+    txId = await anchorProgram.rpc.initializeCandyMachine(candyData, {
       accounts: {
         candyMachine: candyAccount.publicKey,
         wallet: treasuryWallet,
@@ -144,6 +144,37 @@ export const createCandyMachineCoinfra = async function (
           candyAccount.publicKey,
         ),
       ],
-    }),
+    });
+  } catch (error) {
+    console.error(error);
+    const hasConfirmed = await checkTransaction(
+      error.message,
+      anchorProgram.provider.connection,
+    );
+    // If transaction isn't confirmed, throw error.
+    if (!hasConfirmed) {
+      throw error;
+    }
+  }
+
+  return {
+    candyMachine: candyAccount.publicKey,
+    uuid: candyData.uuid,
+    txId,
   };
+};
+
+// If the below error, check the transaction. If it's confirmed, return true.
+// `Error: Transaction was not confirmed in 60.00 seconds. It is unknown if it succeeded or failed. Check signature ${txId} using the Solana Explorer or CLI tools.`
+export const checkTransaction = async (
+  error: string,
+  connection: Connection,
+) => {
+  if (error.indexOf('Check signature') === -1) return false;
+  const signature = error.match(/.* Check signature (.*) using .*/).pop();
+  console.log('signature', signature);
+  // If transaction is null, transaction isn't confirmed. <reference>https://docs.solana.com/developing/clients/jsonrpc-api#results-42
+  const transaction = await connection.getConfirmedTransaction(signature);
+  console.log('transaction', transaction);
+  return Boolean(transaction);
 };
