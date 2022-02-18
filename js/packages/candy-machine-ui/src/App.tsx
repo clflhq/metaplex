@@ -37,6 +37,18 @@ const App = (props: AppProps) => {
   if (!props.network) {
     console.error('You must set the network');
   }
+
+  const getCandyMachineId = (): anchor.web3.PublicKey | undefined => {
+    try {
+      const candyMachineId = new anchor.web3.PublicKey(props.candyMachineId);
+      return candyMachineId;
+    } catch (e) {
+      console.log('Failed to construct CandyMachineId', e);
+      return undefined;
+    }
+  };
+
+  const candyMachineId = getCandyMachineId();
   const network = props.network as WalletAdapterNetwork;
   const rpcHost = process.env.REACT_APP_SOLANA_RPC_HOST!;
   const connection = new anchor.web3.Connection(
@@ -62,7 +74,7 @@ const App = (props: AppProps) => {
         <WalletProvider wallets={wallets} autoConnect>
           <WalletDialogProvider>
             <Home
-              candyMachineId={props.candyMachineId}
+              candyMachineId={candyMachineId}
               connection={connection}
               txTimeout={txTimeoutInMilliseconds}
               rpcHost={rpcHost}
