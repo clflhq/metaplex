@@ -305,10 +305,15 @@ export async function verifyUploadCoinfra({
         console.log('thisSlice');
         console.log(thisSlice);
 
-        const name = fromUTF8Array([...thisSlice.slice(2, 34)]);
-        const uri = fromUTF8Array([...thisSlice.slice(40, 240)]);
+        const name = fromUTF8Array([
+          ...thisSlice.slice(4, 36).filter(n => n !== 0),
+        ]);
+        const uri = fromUTF8Array([
+          ...thisSlice.slice(40, 240).filter(n => n !== 0),
+        ]);
         const cacheItem = cacheContent.items[key];
-        if (!name.match(cacheItem.name) || !uri.match(cacheItem.link)) {
+
+        if (name != cacheItem.name || uri != cacheItem.link) {
           // leaving here for debugging reasons, but it's pretty useless. if the first upload fails - all others are wrong
           console.log(
             `Name (${name}) or uri (${uri}) didnt match cache values of (${cacheItem.name})` +
