@@ -147,7 +147,7 @@ export async function uploadCoinfra({
       const TRANSACTION_SIZE = 5;
       const allIndexesInSlices: number[][] = slice(
         Array.from(Array(keys.length).keys()),
-        500, // need to sign each 500 NFTS(100 txs) for preventing from the hangup of the Phantom wallet
+        100, // need to sign each 100 NFTS(20 txs) for preventing from the hangup of the Phantom wallet
       );
       console.log('allIndexesInSlices');
       console.log(allIndexesInSlices);
