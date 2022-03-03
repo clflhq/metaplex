@@ -14,6 +14,7 @@ import {
   Typography,
   Space,
   Card,
+  Checkbox,
 } from 'antd';
 import { ArtCard } from './../../components/ArtCard';
 import { UserSearch, UserValue } from './../../components/UserSearch';
@@ -49,6 +50,8 @@ import {
 } from '@ant-design/icons';
 import { useTokenList } from '../../contexts/tokenList';
 import { useLocation } from 'react-router-dom';
+import { SafetyDepositDraft } from '../../actions/createAuctionManager';
+import { ArtSelector } from '../auctionCreate/artSelector';
 
 const { Step } = Steps;
 const { Dragger } = Upload;
@@ -72,6 +75,7 @@ export const ArtCreateView = () => {
     { metadataAccount: StringPublicKey } | undefined
   >(undefined);
   const [files, setFiles] = useState<File[]>([]);
+  const [isCollection, setIsCollection] = useState<boolean>(false);
   const [attributes, setAttributes] = useState<IMetadataExtension>({
     name: '',
     symbol: '',
@@ -227,6 +231,8 @@ export const ArtCreateView = () => {
             <InfoStep
               attributes={attributes}
               files={files}
+              isCollection={isCollection}
+              setIsCollection={setIsCollection}
               setAttributes={setAttributes}
               confirm={() => gotoStep(3)}
             />
@@ -663,11 +669,32 @@ const useArtworkFiles = (files: File[], attributes: IMetadataExtension) => {
 const InfoStep = (props: {
   attributes: IMetadataExtension;
   files: File[];
+  isCollection: boolean;
+  setIsCollection: (val: boolean) => void;
   setAttributes: (attr: IMetadataExtension) => void;
   confirm: () => void;
 }) => {
   const { image } = useArtworkFiles(props.files, props.attributes);
   const [form] = Form.useForm();
+  const { isCollection, setIsCollection } = props;
+  const [selectedCollection, setSelectedCollection] = useState<
+    Array<SafetyDepositDraft>
+  >([]);
+
+  const artistFilter = useCallback(
+    (i: SafetyDepositDraft) =>
+      !(i.metadata.info.data.creators || []).some((c: Creator) => !c.verified),
+    [],
+  );
+
+  useEffect(() => {
+    if (selectedCollection.length) {
+      props.setAttributes({
+        ...props.attributes,
+        collection: selectedCollection[0].metadata.info.mint,
+      });
+    }
+  }, [selectedCollection]);
 
   return (
     <>
@@ -727,21 +754,32 @@ const InfoStep = (props: {
               }
             />
           </label>
-          {/*<label className="action-field">*/}
-          {/*  <span className="field-title">Collection</span>*/}
-          {/*  <Input*/}
-          {/*    className="input"*/}
-          {/*    placeholder="Collection Mint Key"*/}
-          {/*    allowClear*/}
-          {/*    value={props.attributes.collection}*/}
-          {/*    onChange={info =>*/}
-          {/*      props.setAttributes({*/}
-          {/*        ...props.attributes,*/}
-          {/*        collection: info.target.value,*/}
-          {/*      })*/}
-          {/*    }*/}
-          {/*  />*/}
-          {/*</label>*/}
+          <label className="action-field direction-row">
+            <Checkbox
+              checked={isCollection}
+              onChange={val => {
+                setIsCollection(val.target.checked);
+              }}
+            />
+            <span className="field-title" style={{ marginLeft: '10px' }}>
+              Is parent collection?
+            </span>
+          </label>
+          {!isCollection && (
+            <label className="action-field">
+              <span className="field-title">Collection</span>
+              <ArtSelector
+                filter={artistFilter}
+                selected={selectedCollection}
+                setSelected={items => {
+                  setSelectedCollection(items);
+                }}
+                allowMultiple={false}
+              >
+                Select NFT
+              </ArtSelector>
+            </label>
+          )}
           <label className="action-field">
             <span className="field-title">Description</span>
             <Input.TextArea
@@ -760,19 +798,24 @@ const InfoStep = (props: {
           </label>
           <label className="action-field">
             <span className="field-title">Maximum Supply</span>
-            <InputNumber
-              placeholder="Quantity"
-              onChange={(val: number) => {
-                props.setAttributes({
-                  ...props.attributes,
-                  properties: {
-                    ...props.attributes.properties,
-                    maxSupply: val,
-                  },
-                });
-              }}
-              className="royalties-input"
-            />
+            {!isCollection ? (
+              <InputNumber
+                placeholder="Quantity"
+                value={props.attributes.properties.maxSupply}
+                onChange={(val: number) => {
+                  props.setAttributes({
+                    ...props.attributes,
+                    properties: {
+                      ...props.attributes.properties,
+                      maxSupply: val,
+                    },
+                  });
+                }}
+                className="royalties-input"
+              />
+            ) : (
+              0
+            )}
           </label>
           <label className="action-field">
             <span className="field-title">Attributes</span>
